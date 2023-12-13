@@ -87,4 +87,6 @@ rec {
   genpolicy = genpolicy-msft;
   genpolicy-msft = callPackage ./genpolicy_msft.nix { };
   genpolicy-kata = callPackage ./genpolicy_kata.nix { };
+
+  kata-agent = callPackage ./kata-agent.nix { };
 }
