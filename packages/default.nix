@@ -90,4 +90,6 @@ rec {
   genpolicy = genpolicy-msft;
   genpolicy-msft = callPackage ./genpolicy_msft.nix { };
   genpolicy-kata = callPackage ./genpolicy_kata.nix { };
+
+  emojivoto = callPackage ./emojivoto.nix { inherit buildContainer pushContainer; };
 }
