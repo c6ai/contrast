@@ -17,26 +17,26 @@ let
   };
   vendorHash = "sha256-XuuZbExK7yXleLn16SKL6W9xPx+NgrC8RxMTlIoeZ5A=";
 in
-{
+rec {
   emoji-svc = buildContainer (buildGoModule {
     inherit version src vendorHash;
     pname = "emojivoto-emoji-svc";
-    subPackages = [ "emojivoto-emoji-svc" ];
+    subPackages = [ "emojivoto-emoji-svc/cmd" ];
     CGO_ENABLED = 0;
     ldflags = [ "-s" "-w" "-buildid=" ];
     proxyVendor = true;
     meta.mainProgram = "emojivoto-emoji-svc";
   });
 
-  voting-svc = buildContainer (buildGoModule {
+  voting-svc = buildGoModule {
     inherit version src vendorHash;
     pname = "emojivoto-voting-svc";
-    subPackages = [ "emojivoto-voting-svc" ];
+    subPackages = [ "emojivoto-voting-svc/cmd" ];
     CGO_ENABLED = 0;
     ldflags = [ "-s" "-w" "-buildid=" ];
     proxyVendor = true;
     meta.mainProgram = "emojivoto-voting-svc";
-  });
+  };
 
   webapp = mkYarnPackage {
     inherit version;
@@ -54,18 +54,27 @@ in
       export NODE_OPTIONS="--openssl-legacy-provider"
       yarn --offline webpack
     '';
+    installPhase = ''
+      mkdir -p $out
+      cp deps/web/dist/index_bundle.js $out
+    '';
     distPhase = "true";
   };
 
-  web = buildContainer (buildGoModule {
+  web = buildGoModule rec {
     inherit version src vendorHash;
     pname = "emojivoto-web";
-    subPackages = [ "emojivoto-web" ];
+    subPackages = [ "emojivoto-web/cmd" ];
     CGO_ENABLED = 0;
     ldflags = [ "-s" "-w" "-buildid=" ];
     proxyVendor = true;
+    passthru.ui = webapp;
+    preBuild = ''
+      mkdir -p emojivoto-web/ui/build
+      cp -R ${passthru.ui}/ emojivoto-web/ui/build/
+    '';
     meta.mainProgram = "emojivoto-web";
-  });
+  };
 
 
 }
