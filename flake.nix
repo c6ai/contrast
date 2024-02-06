@@ -26,9 +26,22 @@
       version = "0.2.0-pre";
 
       treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
+
+      packages = import ./packages { inherit pkgs version; };
+      packages_x86_64-linux = import ./packages { inherit version; pkgs = pkgs.pkgsCross.x86_64-linux; };
+      packages_aarch64-darwin = import ./packages { inherit version; pkgs = pkgs.pkgsCross.aarch64-darwin; };
+      packages_aarch64-multiplatform = import ./packages { inherit version; pkgs = pkgs.pkgsCross.aarch64-multiplatform; };
+      packages_x86_64-darwin = import ./packages { inherit version; pkgs = pkgs.pkgsCross.x86_64-darwin; };
     in
     {
-      packages = import ./packages { inherit pkgs version; };
+      packages = packages //
+        {
+          pkgsCross = lib.recurseIntoAttrs {
+            aarch64-darwin = packages_aarch64-darwin;
+            aarch64-multiplatform = packages_aarch64-multiplatform;
+            x86_64-darwin = packages_x86_64-darwin;
+          };
+        };
 
       devShells.default = pkgs.mkShell {
         packages = with pkgs; [
@@ -44,7 +57,7 @@
         formatting = treefmtEval.config.build.check self;
       };
 
-      legacyPackages = pkgs;
+      # legacyPackages = pkgs;
     });
 
   nixConfig = {
