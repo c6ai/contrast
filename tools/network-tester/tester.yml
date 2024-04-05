@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tester
+  namespace: simple
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tester
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tester
+    spec:
+      runtimeClassName: kata-cc-isolation
+      initContainers:
+        - name: initializer
+          image: "ghcr.io/katexochen/contrast/initializer@sha256:5a589462a43b58c8f49de571fa753d20328649fdd695c33fd373e79e284a75fc"
+          env:
+            - name: COORDINATOR_HOST
+              value: coordinator
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /tls-config
+          resources:
+            requests:
+              memory: 50Mi
+            limits:
+              memory: 50Mi
+      containers:
+        - image: "ghcr.io/katexochen/testing/downloader@sha256:08bcc015992f4a150eb5c7f0f094c8870c30e96b140647a1db6e3e53e68562db"
+          name: voting-svc
+          resources:
+            requests:
+              memory: 500Mi
+          securityContext:
+            privileged: true
+      volumes:
+        - name: tls-certs
+          emptyDir: {}
