@@ -91,7 +91,7 @@ func (w *wgetter) Download(ctx context.Context, url string) (string, error) {
 type native struct{}
 
 func (n *native) Download(ctx context.Context, url string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("native http request failed to create: %w", err)
 	}

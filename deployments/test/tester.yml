@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: tester
-  namespace: simple
+  namespace: edg-default
 spec:
   replicas: 1
   selector:
@@ -16,7 +16,7 @@ spec:
       runtimeClassName: kata-cc-isolation
       initContainers:
         - name: initializer
-          image: "ghcr.io/katexochen/contrast/initializer@sha256:5a589462a43b58c8f49de571fa753d20328649fdd695c33fd373e79e284a75fc"
+          image: "ghcr.io/edgelesssys/contrast/initializer:latest"
           env:
             - name: COORDINATOR_HOST
               value: coordinator
@@ -29,11 +29,15 @@ spec:
             limits:
               memory: 50Mi
       containers:
-        - image: "ghcr.io/3u13r/testing/downloader@sha256:b0f416dd9f675e6022b59e7e8437a2bef11c058d4e084fdc144ee24f2424d518"
-          name: voting-svc
+        - image: "ghcr.io/3u13r/testing/downloader@sha256:fdc3100cd3f21e0c29a78780ba672f45e9715921f4c0cbae005c8df1a6f48191"
+          name: testing
+          command:
+            - /bin/bash
+            - "-c"
+            - sleep 1000000000
           resources:
             requests:
-              memory: 500Mi
+              memory: 2Gi
           securityContext:
             privileged: true
       volumes:
