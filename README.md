@@ -15,7 +15,7 @@ Contrast currently targets the [CoCo preview on AKS](https://learn.microsoft.com
 Some test
 
 <p align="center" width="100%">
-    <img width="33%" src="docs/static/img/illustration.svg">
+    <img width="100%" src="docs/static/img/illustration.svg">
 </p>
 
 
