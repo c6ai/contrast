@@ -11,7 +11,7 @@ This works with unmodified containers in a lift-and-shift approach.
 Contrast currently targets the [CoCo preview on AKS](https://learn.microsoft.com/en-us/azure/confidential-computing/confidential-containers-on-aks-preview).
 
 <p align="center" width="100%">
-    <img width="33%" src="docs/static/img/illustration.svg">
+    <img width="50%" src="docs/static/img/illustration.svg">
 </p>
 
 
