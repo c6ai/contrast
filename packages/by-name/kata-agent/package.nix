@@ -6,23 +6,30 @@
 , protobuf
 , withSeccomp ? true
 , libseccomp
-, withAgentPolicy ? false
+, lvm2
+, openssl
+, withAgentPolicy ? true
 , withStandardOCIRuntime ? false
 }:
 rustPlatform.buildRustPackage rec {
   pname = "kata-agent";
-  version = "3.2.0";
+  version = "3.2.0.azl1";
 
   src = fetchFromGitHub {
-    owner = "kata-containers";
+    owner = "microsoft";
     repo = "kata-containers";
     rev = version;
-    hash = "sha256-zEKuEjw8a5hRNULNSkozjuHT6+hcbuTIbVPPImy/TsQ=";
+    hash = "sha256-fyfPut2RFSsHZugq/zeW0+nA8F9qQNKmyhb5VqkV9Sw=";
   };
 
   sourceRoot = "${src.name}/src/agent";
 
-  cargoHash = "sha256-m4Q3N1O5ME7V4I4c8tJtr/rGN4zpDe4p0c2s4mLeFuY=";
+  cargoLock = {
+    lockFile = "${src}/src/agent/Cargo.lock";
+    outputHashes = {
+      "sev-1.2.1" = "sha256-5UkHDDJMVUG18AN/c6BSMTkEgSG8MBB33DZE355gXdE=";
+    };
+  };
 
   nativeBuildInputs = [
     cmake
@@ -30,7 +37,12 @@ rustPlatform.buildRustPackage rec {
     protobuf
   ];
 
-  buildInputs = lib.optionals withAgentPolicy [
+  buildInputs = [
+    openssl
+    openssl.dev
+    lvm2.dev
+    rustPlatform.bindgenHook
+  ] ++ lib.optionals withSeccomp [
     libseccomp.dev
     libseccomp.lib
     libseccomp
@@ -41,10 +53,14 @@ rustPlatform.buildRustPackage rec {
     chmod -R +w ../..
   '';
 
-  LIBC = "gnu";
-  SECCOMP = if withSeccomp then "yes" else "no";
-  AGENT_POLICY = if withAgentPolicy then "yes" else "no";
-  STANDARD_OCI_RUNTIME = if withStandardOCIRuntime then "yes" else "no";
+  env = {
+    LIBC = "gnu";
+    SECCOMP = if withSeccomp then "yes" else "no";
+    AGENT_POLICY = if withAgentPolicy then "yes" else "no";
+    STANDARD_OCI_RUNTIME = if withStandardOCIRuntime then "yes" else "no";
+    OPENSSL_NO_VENDOR = 1;
+    RUST_BACKTRACE = 1;
+  };
 
   buildPhase = ''
     runHook preBuild
@@ -58,4 +74,6 @@ rustPlatform.buildRustPackage rec {
     "--skip=mount::tests::test_already_baremounted"
     "--skip=netlink::tests::list_routes stdout"
   ];
+
+  meta.mainProgram = "kata-agent";
 }
