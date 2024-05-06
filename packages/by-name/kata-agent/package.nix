@@ -19,7 +19,7 @@ rustPlatform.buildRustPackage rec {
     owner = "microsoft";
     repo = "kata-containers";
     rev = version;
-    hash = "sha256-fyfPut2RFSsHZugq/zeW0+nA8F9qQNKmyhb5VqkV9Sw=";
+    hash = "sha256-W36RJFf0MVRIBV4ahpv6pqdAwgRYrlqmu4Y/8qiILS8=";
   };
 
   sourceRoot = "${src.name}/src/agent";
@@ -28,6 +28,7 @@ rustPlatform.buildRustPackage rec {
     lockFile = "${src}/src/agent/Cargo.lock";
     outputHashes = {
       "sev-1.2.1" = "sha256-5UkHDDJMVUG18AN/c6BSMTkEgSG8MBB33DZE355gXdE=";
+      "regorus-0.1.4" = "sha256-hKhuPEgtVOW1/83fVyQB61ZPRYzNqPdDhS0lNyJpekc=";
     };
   };
 

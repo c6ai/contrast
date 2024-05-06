@@ -14,20 +14,47 @@
 , writeText
 , writeTextDir
 , createrepo_c
-, qemu-utils
 , writeShellApplication
-, e2fsprogs
 , parted
 , cryptsetup
+, closureInfo
+, erofs-utils
 }:
-# https://github.com/microsoft/azurelinux/blob/59ce246f224f282b3e199d9a2dacaa8011b75a06/SPECS/kata-containers-cc/mariner-coco-build-uvm.sh#L18
 let
   kata-version = "3.2.0.azl1";
   source = fetchFromGitHub {
     owner = "microsoft";
     repo = "kata-containers";
     rev = kata-version;
-    hash = "sha256-fyfPut2RFSsHZugq/zeW0+nA8F9qQNKmyhb5VqkV9Sw=";
+    hash = "sha256-W36RJFf0MVRIBV4ahpv6pqdAwgRYrlqmu4Y/8qiILS8=";
+  };
+  # toplevelNixDeps are packages that get installed to the rootfs of the image
+  # they are used to determine the (nix) closure of the rootfs
+  toplevelNixDeps = [ kata-agent ];
+  nixClosure = builtins.toString (lib.strings.splitString "\n" (builtins.readFile "${closureInfo {rootPaths = toplevelNixDeps;}}/store-paths"));
+  rootfsExtraTree = stdenvNoCC.mkDerivation {
+    name = "rootfs-extra-tree";
+    version = kata-version;
+    src = source;
+
+    buildPhase = ''
+      # https://github.com/microsoft/azurelinux/blob/59ce246f224f282b3e199d9a2dacaa8011b75a06/SPECS/kata-containers-cc/mariner-coco-build-uvm.sh#L34-L41
+      mkdir -p /build/rootfs/etc/kata-opa /build/rootfs/usr/lib/systemd/system /build/rootfs/nix/store
+      cp src/agent/kata-agent.service.in /build/rootfs/usr/lib/systemd/system/kata-agent.service
+      cp src/agent/kata-containers.target /build/rootfs/usr/lib/systemd/system/kata-containers.target
+      cp src/kata-opa/allow-set-policy.rego /build/rootfs/etc/kata-opa/default-policy.rego
+      sed -i 's/@BINDIR@\/@AGENT_NAME@/\/usr\/bin\/kata-agent/g'  /build/rootfs/usr/lib/systemd/system/kata-agent.service
+      # TODO: remove this hack
+      sed -i '/ExecStop=/d' /build/rootfs/usr/lib/systemd/system/kata-agent.service
+      sed -i '/FailureAction=/d' /build/rootfs/usr/lib/systemd/system/kata-agent.service
+      touch /build/rootfs/etc/machine-id
+
+      tar --sort=name --mtime="@$SOURCE_DATE_EPOCH" -cvf /build/rootfs-extra-tree.tar -C /build/rootfs .
+
+      mv /build/rootfs-extra-tree.tar $out
+    '';
+
+    dontInstall = true;
   };
   packageIndex = builtins.fromJSON (builtins.readFile ./package-index.json);
   rpmSources = lib.forEach packageIndex
@@ -69,90 +96,105 @@ let
     gpgcheck=0
     enabled=1
   '';
-  rootfs = stdenv.mkDerivation rec {
-    pname = "kata-rootfs";
-    version = kata-version;
-
-    env = {
-      AGENT_SOURCE_BIN = "${lib.getExe kata-agent}";
-      # TODO: understand why build fails with AGENT_POLICY enabled
-      # AGENT_POLICY = "yes";
-      CONF_GUEST = "yes";
-      # TODO: Add support for custom policy file
-      # AGENT_POLICY_FILE=allow-set-policy.rego
-      RUST_VERSION = "not-needed";
-    };
-
-    nativeBuildInputs = [
-      yq-go
-      curl
-      fakeroot
-      bubblewrap
-      util-linux
-      tdnf
-    ];
-
-    src = source;
-
-    sourceRoot = "${src.name}/tools/osbuilder/rootfs-builder";
-
-    buildPhase = ''
-      runHook preBuild
-
-      mkdir -p /build/var/run
-      mkdir -p /build/var/tdnf
-      mkdir -p /build/var/lib/tdnf
-      mkdir -p /build/var/cache/tdnf
-      mkdir -p /build/root
-      unshare --map-root-user bwrap \
-        --bind /nix /nix \
-        --bind ${tdnfConf} /etc/tdnf/tdnf.conf \
-        --bind ${vendor-reposdir}/yum.repos.d /etc/yum.repos.d \
-        --bind /build /build \
-        --bind /build/var /var \
-        --dev-bind /dev/null /dev/null \
-        fakeroot bash -c "bash $(pwd)/rootfs.sh -r /build/root ${distro} && \
-          tar --sort=name --mtime='UTC 1970-01-01' -C /build/root -c . -f $out"
-
-      runHook postBuild
-    '';
-  };
   buildimage = writeShellApplication {
     name = "buildimage";
-    runtimeInputs = [ e2fsprogs cryptsetup ];
+    runtimeInputs = [
+      parted
+      erofs-utils
+      cryptsetup
+    ];
     text = builtins.readFile ./buildimage.sh;
   };
 in
-stdenvNoCC.mkDerivation rec {
+stdenv.mkDerivation rec {
   pname = "kata-image";
   version = kata-version;
 
+  outputs = [ "out" "verity" "components" ];
+
+  env = {
+    AGENT_SOURCE_BIN = "${lib.getExe kata-agent}";
+    # TODO: understand why build fails with AGENT_POLICY enabled
+    # AGENT_POLICY = "yes";
+    CONF_GUEST = "yes";
+    # TODO: Add support for custom policy file
+    # AGENT_POLICY_FILE=allow-set-policy.rego
+    RUST_VERSION = "not-needed";
+  };
+
   nativeBuildInputs = [
-    qemu-utils
+    yq-go
+    curl
     fakeroot
     bubblewrap
     util-linux
-    parted
+    tdnf
     buildimage
   ];
 
-  dontUnpack = true;
+  src = source;
+
+  sourceRoot = "${src.name}/tools/osbuilder/rootfs-builder";
 
   buildPhase = ''
     runHook preBuild
 
-    mkdir -p /build/rootfs
+    # use a fakeroot environment to build the rootfs as a tar
+    # this is required to create files with the correct ownership and permissions
+    # including suid
+    # Upstream build invokation:
+    # https://github.com/microsoft/azurelinux/blob/59ce246f224f282b3e199d9a2dacaa8011b75a06/SPECS/kata-containers-cc/mariner-coco-build-uvm.sh#L18
+    mkdir -p /build/var/run
+    mkdir -p /build/var/tdnf
+    mkdir -p /build/var/lib/tdnf
+    mkdir -p /build/var/cache/tdnf
+    mkdir -p /build/root
     unshare --map-root-user bwrap \
       --bind /nix /nix \
+      --bind ${tdnfConf} /etc/tdnf/tdnf.conf \
+      --bind ${vendor-reposdir}/yum.repos.d /etc/yum.repos.d \
       --bind /build /build \
-      --bind /build/rootfs /rootfs \
+      --bind /build/var /var \
       --dev-bind /dev/null /dev/null \
-      --dev-bind /dev/random /dev/random \
-      --dev-bind /dev/urandom /dev/urandom \
-      fakeroot bash -c "tar -pxf ${rootfs} -C /rootfs  && bash ${lib.getExe buildimage} /rootfs $out"
+      fakeroot bash -c "bash $(pwd)/rootfs.sh -r /build/root ${distro} && \
+        sed -i 's+root:x:0:0:root:/root:/bin/bash+root::0:0:root:/root:/bin/bash+' /build/root/etc/passwd && \
+        tar \
+          --exclude='./usr/lib/systemd/system/systemd-coredump@*' \
+          --exclude='./usr/lib/systemd/system/systemd-journald*' \
+          --exclude='./usr/lib/systemd/system/systemd-journald-dev-log*' \
+          --exclude='./usr/lib/systemd/system/systemd-journal-flush*' \
+          --exclude='./usr/lib/systemd/system/systemd-random-seed*' \
+          --exclude='./usr/lib/systemd/system/systemd-timesyncd*' \
+          --exclude='./usr/lib/systemd/system/systemd-tmpfiles-setup*' \
+          --exclude='./usr/lib/systemd/system/systemd-update-utmp*' \
+          --exclude='*systemd-bless-boot-generator*' \
+          --exclude='*systemd-fstab-generator*' \
+          --exclude='*systemd-getty-generator*' \
+          --exclude='*systemd-gpt-auto-generator*' \
+          --exclude='*systemd-tmpfiles-cleanup.timer*' \
+          --sort=name --mtime='UTC 1970-01-01' -C /build/root -c . -f /build/rootfs.tar"
+
+    # add the extra tree to the rootfs
+    tar --concatenate --file=/build/rootfs.tar ${rootfsExtraTree}
+    # add the closure to the rootfs
+    tar --transform 's+^+./+' -cf /build/closure.tar --mtime="@$SOURCE_DATE_EPOCH" --sort=name ${nixClosure}
+    # combine the rootfs and the closure
+    tar --concatenate --file=/build/rootfs.tar /build/closure.tar
+
+    # convert tar to a squashfs image with dm-verity hash
+    ${lib.getExe buildimage} /build/rootfs.tar $out
 
     runHook postBuild
   '';
 
-  passthru.rootfs = rootfs;
+  postInstall = ''
+    mkdir -p $verity
+    mkdir -p $components
+    mv $out/{dm_verity.txt,roothash,salt,hash_type,data_blocks,data_block_size,hash_blocks,hash_block_size,hash_algorithm} $verity/
+    mv $out/rootfs $components/
+    mv $out/hashtree $components/
+    mv $out/raw.img /build/raw.img
+    rm -rf $out
+    mv /build/raw.img $out
+  '';
 }

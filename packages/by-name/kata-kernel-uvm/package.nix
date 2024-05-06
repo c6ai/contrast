@@ -33,59 +33,42 @@ let
       filterdiff --remove-timestamps /build/tarfs.patch > $out
     '';
   };
-  kernel = linuxManualConfig {
-    src = fetchurl {
-      url = "https://cblmarinerstorage.blob.core.windows.net/sources/core/kernel-uvm-${modDirVersion}.tar.gz";
-      hash = "sha256-8EU8NmU4eiqHdDeCNH28y2wKLaHx6fNcBKzWupqf2Sw=";
-    };
-    kernelPatches = [
-      # this patches the existing Makefile and Kconfig to know about CONFIG_TARFS_FS and fs/tarfs
-      { name = "build_tarfs"; patch = ./0001-kernel-uvm-6-1-build-tarfs.patch; extraConfig = { TARFS_FS = "y"; }; }
-      # this adds fs/tarfs
-      { name = "tarfs"; patch = tarfs_patch; }
-    ];
-    configfile = fetchurl {
-      url = "https://raw.githubusercontent.com/microsoft/azurelinux/59ce246f224f282b3e199d9a2dacaa8011b75a06/SPECS/kernel-uvm/config";
-      hash = "sha256-h13fkpQSaYnRCurkqw+zHA5BUtPxXApv6NspVAV2vXw=";
-    };
-    version = kver;
-    modDirVersion = modDirVersion;
-    # Allow reading the kernel config
-    # this is required to allow nix
-    # evaluation to depend on cfg
-    # and correctly build everything.
-    # Without this, the kernel build
-    # has no support for modules.
-    allowImportFromDerivation = true;
-  };
-  # tarfs = stdenv.mkDerivation rec {
-  #   name = "tarfs-${kataVersion}-${kernel.version}";
-  #   version = kataVersion;
-
-  #   src = fetchFromGitHub {
-  #     owner = "microsoft";
-  #     repo = "kata-containers";
-  #     rev = kataVersion;
-  #     hash = "sha256-fyfPut2RFSsHZugq/zeW0+nA8F9qQNKmyhb5VqkV9Sw=";
-  #   };
-
-  #   sourceRoot = "${src.name}/src/tarfs";
-  #   nativeBuildInputs = kernel.moduleBuildDependencies;
-
-  #   makeFlags = [
-  #     # setting KERNELRELEASE will attempt to add it to bzImage
-  #     # like CONFIG_TARFS=y
-  #     # If KERNELRELEASE is not set, tarfs will be built as a module
-  #     # like CONFIG_TARFS=m
-  #     # "KERNELRELEASE=${kernel.modDirVersion}"
-  #     "KDIR=${kernel.dev}/lib/modules/${kernel.modDirVersion}/build"
-  #     "INSTALL_MOD_PATH=$(out)"
-  #   ];
-
-  #   meta = with lib; {
-  #     homepage = "https://github.com/microsoft/kata-containers";
-  #     platforms = platforms.linux;
-  #   };
-  # };
 in
-kernel
+linuxManualConfig {
+  src = fetchurl {
+    url = "https://cblmarinerstorage.blob.core.windows.net/sources/core/kernel-uvm-${modDirVersion}.tar.gz";
+    hash = "sha256-8EU8NmU4eiqHdDeCNH28y2wKLaHx6fNcBKzWupqf2Sw=";
+  };
+  kernelPatches = [
+    # this patches the existing Makefile and Kconfig to know about CONFIG_TARFS_FS and fs/tarfs
+    { name = "build_tarfs"; patch = ./0001-kernel-uvm-6-1-build-tarfs.patch; }
+    # this adds fs/tarfs
+    { name = "tarfs"; patch = tarfs_patch; }
+  ];
+  configfile = fetchurl {
+    url = "https://raw.githubusercontent.com/microsoft/azurelinux/59ce246f224f282b3e199d9a2dacaa8011b75a06/SPECS/kernel-uvm/config";
+    # Contrast additionally requires the following features:
+    # - erofs
+    postFetch = ''
+      cat <<- EOF >> $out
+      CONFIG_MISC_FILESYSTEMS=y
+      CONFIG_EROFS_FS=y
+      CONFIG_EROFS_FS_XATTR=y
+      CONFIG_EROFS_FS_POSIX_ACL=y
+      CONFIG_EROFS_FS_SECURITY=y
+      CONFIG_EROFS_FS_ZIP=y
+      CONFIG_EROFS_FS_ONDEMAND=y
+      EOF
+    '';
+    hash = "sha256-c1+FQzzJQbAvRhV2j0OqRYWcET5kMqvz3vNL7exkudg=";
+  };
+  version = kver;
+  modDirVersion = modDirVersion;
+  # Allow reading the kernel config
+  # this is required to allow nix
+  # evaluation to depend on cfg
+  # and correctly build everything.
+  # Without this, the kernel build
+  # has no support for modules.
+  allowImportFromDerivation = true;
+}

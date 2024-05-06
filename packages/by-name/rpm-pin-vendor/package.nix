@@ -8,6 +8,7 @@
 , jq
 , wget
 , symlinkJoin
+, fakeroot
 , nix
 }:
 let
@@ -35,11 +36,10 @@ let
     kata-packages-uvm-coco
     systemd
     libseccomp
-    opa
   '';
   update_lockfile = writeShellApplication {
     name = "update_lockfile";
-    runtimeInputs = [ dnf4 jq wget nix ];
+    runtimeInputs = [ dnf4 jq wget nix fakeroot ];
     text = builtins.readFile ./update_lockfile.sh;
   };
 in

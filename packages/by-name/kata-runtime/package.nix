@@ -1,48 +1,64 @@
-{ rustPlatform
+{ buildGoModule
 , fetchFromGitHub
-, cmake
-, pkg-config
-, protobuf
+, yq-go
+, git
 }:
-rustPlatform.buildRustPackage rec {
+buildGoModule rec {
   pname = "kata-runtime";
-  version = "3.2.0";
+  version = "3.2.0.azl1";
 
   src = fetchFromGitHub {
-    owner = "kata-containers";
+    owner = "microsoft";
     repo = "kata-containers";
     rev = version;
-    hash = "sha256-zEKuEjw8a5hRNULNSkozjuHT6+hcbuTIbVPPImy/TsQ=";
+    hash = "sha256-SsgI6h4/rjVWqUySoNgnbqAS9TdFAl05Fk2M1mJP3wM=";
   };
 
   sourceRoot = "${src.name}/src/runtime";
 
-  cargoHash = "sha256-m4Q3N1O5ME7V4I4c8tJtr/rGN4zpDe4p0c2s4mLeFuY=";
+  preBuild = ''
+    substituteInPlace Makefile \
+      --replace-fail 'include golang.mk' ""
+    for f in $(find . -name '*.in' -type f); do
+      make ''${f%.in}
+    done
+  '';
+
+  checkFlags =
+    let
+      # Skip tests that require a working hypervisor
+      skippedTests = [
+        "TestArchRequiredKernelModules"
+        "TestCheckCLIFunctionFail"
+        "TestEnvCLIFunction(|Fail)"
+        "TestEnvGetAgentInfo"
+        "TestEnvGetEnvInfo(|SetsCPUType|NoHypervisorVersion|AgentError|NoOSRelease|NoProcCPUInfo|NoProcVersion)"
+        "TestEnvGetRuntimeInfo"
+        "TestEnvHandleSettings(|InvalidParams)"
+        "TestGetHypervisorInfo"
+        "TestGetHypervisorInfoSocket"
+        "TestSetCPUtype"
+      ];
+    in
+    [ "-skip=^${builtins.concatStringsSep "$|^" skippedTests}$" ];
+
+  CGO_ENABLED = 0;
+  ldflags = [ "-s" ];
+
+  proxyVendor = true;
+  vendorHash = null;
+  subPackages = [
+    "cmd/containerd-shim-kata-v2"
+    "cmd/kata-monitor"
+    # TODO(malt3): enable kata-runtime
+    # It depends on CGO and kvm
+    # "cmd/kata-runtime"
+  ];
 
   nativeBuildInputs = [
-    cmake
-    pkg-config
-    protobuf
+    yq-go
+    git
   ];
 
-  # Build.rs writes to src
-  postConfigure = ''
-    chmod -R +w ../..
-  '';
-
-  LIBC = "gnu";
-  SECCOMP = "no";
-
-  buildPhase = ''
-    runHook preBuild
-
-    make
-
-    runHook postBuild
-  '';
-
-  checkFlags = [
-    "--skip=mount::tests::test_already_baremounted"
-    "--skip=netlink::tests::list_routes stdout"
-  ];
+  meta.mainProgram = "containerd-shim-kata-v2";
 }

@@ -21,6 +21,8 @@ stdenv.mkDerivation rec {
   pname = "kata-containers-igvm";
   version = kata-version;
 
+  outputs = [ "out" "debug" ];
+
   nativeBuildInputs = [
     igvm-tooling
   ];
@@ -35,19 +37,22 @@ stdenv.mkDerivation rec {
       --replace-fail '#!/usr/bin/env bash' '#!${stdenv.shell}' \
       --replace-fail 'python3 igvm/igvmgen.py' igvmgen \
       --replace-fail igvm/acpi/acpi-clh/ "${igvm-tooling}/share/igvm-tooling/acpi/acpi-clh/" \
+      --replace-fail rootfstype=ext4 rootfstype=erofs \
+      --replace-fail rootflags=data=ordered,errors=remount-ro "" \
       --replace-fail 'mv ''${igvm_name} ''${script_dir}' "" \
       --replace-fail sudo ""
-    # TODO: cleanup
-    #  --replace-fail '-acpi igvm/acpi/acpi-clh/' "" \
-    # prevent non-hermetic download of igvm-tooling / igvmgen
-    mkdir -p msigvm-1.2.0
   '';
 
   buildPhase = ''
     runHook preBuild
 
+    # prevent non-hermetic download of igvm-tooling / igvmgen
+    mkdir -p msigvm-1.2.0
     # TODO: check if signature is deterministic
-    ./igvm_builder.sh -k ${kata-kernel-uvm}/bzImage -v ${kata-image}/dm_verity.txt -o $out
+    ./igvm_builder.sh -k ${kata-kernel-uvm}/bzImage -v ${kata-image.verity}/dm_verity.txt -o $out
+    # prevent non-hermetic download of igvm-tooling / igvmgen
+    mkdir -p msigvm-1.2.0
+    ./igvm_builder.sh -d -k ${kata-kernel-uvm}/bzImage -v ${kata-image.verity}/dm_verity.txt -o $debug
 
     runHook postBuild
   '';
