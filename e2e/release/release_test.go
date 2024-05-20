@@ -37,7 +37,6 @@ var (
 	owner     = flag.String("owner", "edgelesssys", "Github repository owner")
 	repo      = flag.String("repo", "contrast", "Github repository")
 	tag       = flag.String("tag", "", "tag name of the release to download")
-	namespace = flag.String("namespace", "", "k8s namespace to install resources to (will be deleted unless --keep is set)")
 	keep      = flag.Bool("keep", false, "don't delete test resources and deployment")
 )
 
@@ -47,35 +46,6 @@ func TestRelease(t *testing.T) {
 	ctx := context.Background()
 	k := kubeclient.NewForTest(t)
 
-	if *namespace == "" {
-		*namespace = randomNamespace(t)
-		t.Logf("Created test namespace %s", *namespace)
-	}
-
-	require.True(t, t.Run("create-namespace", func(t *testing.T) {
-		require := require.New(t)
-		ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
-		defer cancel()
-
-		res, err := kuberesource.ResourcesToUnstructured([]any{kuberesource.Namespace(*namespace)})
-		require.NoError(err)
-		require.NoError(k.Apply(ctx, res...))
-	}), "the namespace is required for subsequent tests to run")
-
-	t.Cleanup(func() {
-		if *keep {
-			return
-		}
-		ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
-		defer cancel()
-
-		res, err := kuberesource.ResourcesToUnstructured([]any{kuberesource.Namespace(*namespace)})
-		if err != nil {
-			return
-		}
-		k.Delete(ctx, res...)
-	})
-
 	dir := fetchRelease(ctx, t)
 
 	contrast := &contrast{dir}
@@ -83,6 +53,7 @@ func TestRelease(t *testing.T) {
 	for _, sub := range []string{"help"} {
 		contrast.Run(t, ctx, 2*time.Second, sub)
 	}
+
 	require.True(t, t.Run("apply-runtime", func(t *testing.T) {
 		require := require.New(t)
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -93,14 +64,8 @@ func TestRelease(t *testing.T) {
 		resources, err := kubeapi.UnmarshalUnstructuredK8SResource(yaml)
 		require.NoError(err)
 
-		for _, r := range resources {
-			if r.GetKind() != "RuntimeClass" {
-				r.SetNamespace(*namespace)
-			}
-		}
-
 		require.NoError(k.Apply(ctx, resources...))
-		require.NoError(k.WaitForDaemonset(ctx, *namespace, "contrast-node-installer"))
+		require.NoError(k.WaitForDaemonset(ctx, "kube-system", "contrast-node-installer"))
 	}), "the runtime is required for subsequent tests to run")
 
 	var coordinatorIP string
@@ -114,13 +79,9 @@ func TestRelease(t *testing.T) {
 		resources, err := kubeapi.UnmarshalUnstructuredK8SResource(yaml)
 		require.NoError(err)
 
-		for _, r := range resources {
-			r.SetNamespace(*namespace)
-		}
-
 		require.NoError(k.Apply(ctx, resources...))
-		require.NoError(k.WaitForDeployment(ctx, *namespace, "coordinator"))
-		coordinatorIP, err = k.WaitForLoadBalancer(ctx, *namespace, "coordinator")
+		require.NoError(k.WaitForDeployment(ctx, "default", "coordinator"))
+		coordinatorIP, err = k.WaitForLoadBalancer(ctx, "default", "coordinator")
 		require.NoError(err)
 	}), "the coordinator is required for subsequent tests to run")
 
@@ -136,21 +97,7 @@ func TestRelease(t *testing.T) {
 
 		infos, err := os.ReadDir(path.Join(dir, "deployment"))
 		require.NoError(err)
-		for _, info := range infos {
-			name := path.Join(path.Join(dir, "deployment"), info.Name())
-			yaml, err := os.ReadFile(name)
-			require.NoError(err)
-			resources, err := kubeapi.UnmarshalUnstructuredK8SResource(yaml)
-			require.NoError(err)
-
-			for _, r := range resources {
-				r.SetNamespace(*namespace)
-			}
-			newYAML, err := kuberesource.EncodeUnstructured(resources)
-			require.NoError(err)
-			require.NoError(os.WriteFile(name, newYAML, 0o644))
-
-		}
+		require.NotEmpty(infos, "demo deployment does not contain files")
 	}), "unpacking needs to succeed for subsequent tests to run")
 
 	contrast.Run(t, ctx, 2*time.Minute, "generate", "deployment/")
