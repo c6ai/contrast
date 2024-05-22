@@ -26,14 +26,16 @@ import (
 	"github.com/edgelesssys/contrast/internal/embedbin"
 	"github.com/edgelesssys/contrast/internal/kuberesource"
 	"github.com/edgelesssys/contrast/internal/manifest"
+	applyappsv1 "k8s.io/client-go/applyconfigurations/apps/v1"
 	applycorev1 "k8s.io/client-go/applyconfigurations/core/v1"
 
 	"github.com/spf13/cobra"
 )
 
 const (
-	kataPolicyAnnotationKey   = "io.katacontainers.config.agent.policy"
-	contrastRoleAnnotationKey = "contrast.edgeless.systems/pod-role"
+	kataPolicyAnnotationKey      = "io.katacontainers.config.agent.policy"
+	contrastRoleAnnotationKey    = "contrast.edgeless.systems/pod-role"
+	skipInitializerAnnotationKey = "contrast.edgeless.systems/skip-initializer"
 )
 
 // NewGenerateCmd creates the contrast generate subcommand.
@@ -62,6 +64,9 @@ subcommands.`,
 	cmd.Flags().StringP("manifest", "m", manifestFilename, "path to manifest (.json) file")
 	cmd.Flags().StringArrayP("workload-owner-key", "w", []string{workloadOwnerPEM}, "path to workload owner key (.pem) file")
 	cmd.Flags().BoolP("disable-updates", "d", false, "prevent further updates of the manifest")
+	cmd.Flags().String("image-replacements", "", "path to image replacements file")
+	cmd.Flags().Bool("skip-initializer", false, "skip injection of Contrast initializer")
+	cmd.Flags().MarkHidden("image-replacements")
 	must(cmd.MarkFlagFilename("policy", "rego"))
 	must(cmd.MarkFlagFilename("settings", "json"))
 	must(cmd.MarkFlagFilename("manifest", "json"))
@@ -104,6 +109,13 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 
 	if err := generateWorkloadOwnerKey(flags); err != nil {
 		return fmt.Errorf("generating workload owner key: %w", err)
+	}
+
+	if !flags.skipInitializer {
+		if err := injectInitializer(paths, flags.imageReplacementsFile, log); err != nil {
+			return fmt.Errorf("failed to inject initializer: %w", err)
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "✔️ Injected initializer")
 	}
 
 	defaultManifest := manifest.Default()
@@ -233,6 +245,77 @@ func generatePolicies(ctx context.Context, regoRulesPath, policySettingsPath str
 		}
 
 		logger.Info("Calculated policy hash", "hash", hex.EncodeToString(policyHash[:]), "path", yamlPath)
+	}
+	return nil
+}
+
+func injectInitializer(paths []string, imageReplacementsFile string, log *slog.Logger) error {
+	var replacements map[string]string
+	if imageReplacementsFile != "" {
+		f, err := os.Open(imageReplacementsFile)
+		if err != nil {
+			return fmt.Errorf("could not open image definition file %s: %w", imageReplacementsFile, err)
+		}
+		defer f.Close()
+
+		replacements, err = kuberesource.ImageReplacementsFromFile(f)
+		if err != nil {
+			return fmt.Errorf("could not parse image definition file %s: %w", imageReplacementsFile, err)
+		}
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", path, err)
+		}
+		kubeObjs, err := kuberesource.UnmarshalApplyConfigurations(data)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal %s: %w", path, err)
+		}
+
+		for i := range kubeObjs {
+			var skip bool
+			resource := kubeObjs[i]
+
+			switch r := resource.(type) {
+			case *applyappsv1.DeploymentApplyConfiguration:
+				if r.Annotations != nil && r.Annotations[skipInitializerAnnotationKey] == "true" {
+					skip = true
+				}
+			case *applyappsv1.DaemonSetApplyConfiguration:
+				if r.Annotations != nil && r.Annotations[skipInitializerAnnotationKey] == "true" {
+					skip = true
+				}
+			case *applyappsv1.StatefulSetApplyConfiguration:
+				if r.Annotations != nil && r.Annotations[skipInitializerAnnotationKey] == "true" {
+					skip = true
+				}
+			default:
+				log.Debug("Unsupported resource type for initializer injection", "resource", resource)
+				continue
+			}
+
+			if skip {
+				log.Debug("Skipping initializer injection based on annotation", "resource", resource)
+				continue
+			}
+
+			resource, err = kuberesource.AddInitializer(resource.(*applyappsv1.DeploymentApplyConfiguration), kuberesource.Initializer())
+			if err != nil {
+				return fmt.Errorf("failed to inject initializer: %w", err)
+			}
+			kubeObjs[i] = resource
+		}
+
+		kuberesource.PatchImages(kubeObjs, replacements)
+		log.Debug("Updating resources in yaml file", "path", path)
+		modifiedData, err := kuberesource.EncodeResources(kubeObjs...)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, modifiedData, 0o644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", path, err)
+		}
 	}
 	return nil
 }
@@ -378,12 +461,14 @@ func newKeyPair() ([]byte, error) {
 }
 
 type generateFlags struct {
-	policyPath        string
-	settingsPath      string
-	manifestPath      string
-	workloadOwnerKeys []string
-	disableUpdates    bool
-	workspaceDir      string
+	policyPath            string
+	settingsPath          string
+	manifestPath          string
+	workloadOwnerKeys     []string
+	disableUpdates        bool
+	workspaceDir          string
+	imageReplacementsFile string
+	skipInitializer       bool
 }
 
 func parseGenerateFlags(cmd *cobra.Command) (*generateFlags, error) {
@@ -427,13 +512,24 @@ func parseGenerateFlags(cmd *cobra.Command) (*generateFlags, error) {
 		}
 	}
 
+	imageReplacementsFile, err := cmd.Flags().GetString("image-replacements")
+	if err != nil {
+		return nil, err
+	}
+	skipInitializer, err := cmd.Flags().GetBool("skip-initializer")
+	if err != nil {
+		return nil, err
+	}
+
 	return &generateFlags{
-		policyPath:        policyPath,
-		settingsPath:      settingsPath,
-		manifestPath:      manifestPath,
-		workloadOwnerKeys: workloadOwnerKeys,
-		disableUpdates:    disableUpdates,
-		workspaceDir:      workspaceDir,
+		policyPath:            policyPath,
+		settingsPath:          settingsPath,
+		manifestPath:          manifestPath,
+		workloadOwnerKeys:     workloadOwnerKeys,
+		disableUpdates:        disableUpdates,
+		workspaceDir:          workspaceDir,
+		imageReplacementsFile: imageReplacementsFile,
+		skipInitializer:       skipInitializer,
 	}, nil
 }
 
