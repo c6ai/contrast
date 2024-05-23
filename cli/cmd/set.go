@@ -146,6 +146,18 @@ func runSet(cmd *cobra.Command, args []string) error {
 		coordRootPEMFilename: resp.RootCA,
 		meshCAPEMFilename:    resp.MeshCA,
 	}
+
+	if len(resp.SeedShares) > 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "✔️ Seed shares received")
+		seedShareFile, err := json.MarshalIndent(resp.SeedShares, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshaling seed shares: %w", err)
+		}
+		// TODO(katexochen): feat#recovery add file once feature is ready.
+		_ = seedShareFile
+		// filelist[seedSharesFilename] = seedShareFile
+	}
+
 	if err := writeFilelist(flags.workspaceDir, filelist); err != nil {
 		return fmt.Errorf("writing filelist: %w", err)
 	}
