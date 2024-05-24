@@ -41,7 +41,7 @@ type CA struct {
 }
 
 // New creates a new CA.
-func New() (*CA, error) {
+func New(rootPrivKey *ecdsa.PrivateKey) (*CA, error) {
 	now := time.Now()
 	notBefore := now.Add(-time.Hour)
 	notAfter := now.AddDate(10, 0, 0)
@@ -53,10 +53,6 @@ func New() (*CA, error) {
 		IsCA:                  true,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
-	}
-	rootPrivKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	if err != nil {
-		return nil, fmt.Errorf("generating root private key: %w", err)
 	}
 	rootPEM, err := createCert(root, root, &rootPrivKey.PublicKey, rootPrivKey)
 	if err != nil {

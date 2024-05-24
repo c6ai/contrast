@@ -9,8 +9,10 @@ import (
 	"os"
 
 	"github.com/edgelesssys/contrast/internal/ca"
+	"github.com/edgelesssys/contrast/internal/crypto"
 	"github.com/edgelesssys/contrast/internal/logger"
 	"github.com/edgelesssys/contrast/internal/meshapi"
+	"github.com/edgelesssys/contrast/internal/seedengine"
 	"github.com/edgelesssys/contrast/internal/userapi"
 	"golang.org/x/sync/errgroup"
 )
@@ -35,18 +37,32 @@ func run() (retErr error) {
 
 	logger.Info("Coordinator started")
 
-	caInstance, err := ca.New()
+	seed, err := crypto.GenerateRandomBytes(256)
+	if err != nil {
+		return fmt.Errorf("generating random seed: %w", err)
+	}
+	salt, err := crypto.GenerateRandomBytes(256)
+	if err != nil {
+		return fmt.Errorf("generating random salt: %w", err)
+	}
+	logger.Info("Generated new seed and salt")
+
+	seedEngine, err := seedengine.New(seed, salt)
+	if err != nil {
+		return fmt.Errorf("creating seed engine: %w", err)
+	}
+
+	caInstance, err := ca.New(seedEngine.RootCAKey())
 	if err != nil {
 		return fmt.Errorf("creating CA: %w", err)
 	}
 
 	meshAuth := newMeshAuthority(caInstance, logger)
-	userAPI := newUserAPIServer(meshAuth, caInstance, logger)
-	meshAPI := newMeshAPIServer(meshAuth, caInstance, logger)
 
 	eg := errgroup.Group{}
 
 	eg.Go(func() error {
+		userAPI := newUserAPIServer(meshAuth, caInstance, logger)
 		logger.Info("Coordinator user API listening")
 		if err := userAPI.Serve(net.JoinHostPort("0.0.0.0", userapi.Port)); err != nil {
 			return fmt.Errorf("serving Coordinator API: %w", err)
@@ -55,6 +71,7 @@ func run() (retErr error) {
 	})
 
 	eg.Go(func() error {
+		meshAPI := newMeshAPIServer(meshAuth, caInstance, logger)
 		logger.Info("Coordinator mesh API listening")
 		if err := meshAPI.Serve(net.JoinHostPort("0.0.0.0", meshapi.Port)); err != nil {
 			return fmt.Errorf("serving mesh API: %w", err)
