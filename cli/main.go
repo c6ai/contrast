@@ -45,6 +45,7 @@ func newRootCmd() *cobra.Command {
 		cmd.NewSetCmd(),
 		cmd.NewVerifyCmd(),
 		cmd.NewRuntimeCmd(),
+		cmd.NewRecoverCmd(),
 	)
 
 	return root
