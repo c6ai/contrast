@@ -12,29 +12,19 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"time"
 
 	"github.com/edgelesssys/contrast/coordinator/internal/authority"
-	"github.com/edgelesssys/contrast/internal/attestation/snp"
 	"github.com/edgelesssys/contrast/internal/ca"
-	"github.com/edgelesssys/contrast/internal/grpc/atlscredentials"
-	"github.com/edgelesssys/contrast/internal/logger"
 	"github.com/edgelesssys/contrast/internal/manifest"
 	"github.com/edgelesssys/contrast/internal/memstore"
 	"github.com/edgelesssys/contrast/internal/userapi"
-	grpcprometheus "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
-	"github.com/prometheus/client_golang/prometheus"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
 type userAPIServer struct {
-	grpc            *grpc.Server
 	policyTextStore store[manifest.HexString, manifest.Policy]
 	manifSetGetter  manifestSetGetter
 	logger          *slog.Logger
@@ -42,50 +32,14 @@ type userAPIServer struct {
 	userapi.UnimplementedUserAPIServer
 }
 
-func newUserAPIServer(mSGetter manifestSetGetter, reg *prometheus.Registry, log *slog.Logger) *userAPIServer {
-	issuer := snp.NewIssuer(logger.NewNamed(log, "snp-issuer"))
-	credentials := atlscredentials.New(issuer, nil)
-
-	grpcUserAPIMetrics := grpcprometheus.NewServerMetrics(
-		grpcprometheus.WithServerCounterOptions(
-			grpcprometheus.WithSubsystem("contrast_userapi"),
-		),
-		grpcprometheus.WithServerHandlingTimeHistogram(
-			grpcprometheus.WithHistogramSubsystem("contrast_userapi"),
-			grpcprometheus.WithHistogramBuckets([]float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2.5, 5}),
-		),
-	)
-
-	grpcServer := grpc.NewServer(
-		grpc.Creds(credentials),
-		grpc.KeepaliveParams(keepalive.ServerParameters{Time: 15 * time.Second}),
-		grpc.ChainStreamInterceptor(
-			grpcUserAPIMetrics.StreamServerInterceptor(),
-		),
-		grpc.ChainUnaryInterceptor(
-			grpcUserAPIMetrics.UnaryServerInterceptor(),
-		),
-	)
+func newUserAPIServer(mSGetter manifestSetGetter, log *slog.Logger) *userAPIServer {
 	s := &userAPIServer{
-		grpc:            grpcServer,
 		policyTextStore: memstore.New[manifest.HexString, manifest.Policy](),
 		manifSetGetter:  mSGetter,
 		logger:          log.WithGroup("userapi"),
 	}
-	userapi.RegisterUserAPIServer(s.grpc, s)
-
-	grpcUserAPIMetrics.InitializeMetrics(grpcServer)
-	reg.MustRegister(grpcUserAPIMetrics)
 
 	return s
-}
-
-func (s *userAPIServer) Serve(endpoint string) error {
-	lis, err := net.Listen("tcp", endpoint)
-	if err != nil {
-		return fmt.Errorf("failed to listen: %w", err)
-	}
-	return s.grpc.Serve(lis)
 }
 
 func (s *userAPIServer) SetManifest(ctx context.Context, req *userapi.SetManifestRequest,
@@ -167,8 +121,10 @@ func (s *userAPIServer) validatePeer(ctx context.Context) error {
 	if err != nil && errors.Is(err, authority.ErrNoManifest) {
 		// in the initial state, no peer validation is required
 		return nil
-	}
-	if err != nil {
+	} else if err != nil && errors.Is(err, authority.ErrNeedsRecovery) {
+		// TODO(burgerdev): give the user something more palatable.
+		return err
+	} else if err != nil {
 		return fmt.Errorf("getting latest manifest: %w", err)
 	}
 	if len(latest.WorkloadOwnerKeyDigests) == 0 {

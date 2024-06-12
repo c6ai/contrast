@@ -32,8 +32,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// ErrNoManifest is returned when a manifest is needed but not present.
-var ErrNoManifest = errors.New("no manifest configured")
+var (
+	// ErrNoManifest is returned when a manifest is needed but not present.
+	ErrNoManifest = errors.New("no manifest configured")
+
+	// ErrNeedsRecovery is returned if state exists, but no secrets are available, e.g. after restart.
+	ErrNeedsRecovery = errors.New("coordinator is in recovery mode")
+)
 
 // Bundle is a set of PEM-encoded certificates for Contrast workloads.
 type Bundle struct {
@@ -317,7 +322,7 @@ func (m *Authority) SetManifest(manifestBytes []byte, policies [][]byte) (*ca.CA
 // LatestManifest retrieves the active manifest.
 func (m *Authority) LatestManifest() (*manifest.Manifest, error) {
 	if m.se.Load() == nil {
-		return nil, ErrNoManifest
+		return nil, ErrNeedsRecovery
 	}
 	if err := m.syncState(); err != nil {
 		return nil, fmt.Errorf("syncing internal state: %w", err)
@@ -327,11 +332,6 @@ func (m *Authority) LatestManifest() (*manifest.Manifest, error) {
 		return nil, ErrNoManifest
 	}
 	return c.manifest, nil
-}
-
-// Recoverable returns whether the Authority can be recovered from a persisted state.
-func (m *Authority) Recoverable() (bool, error) {
-	return m.hist.HasLatest()
 }
 
 // Recover recovers the seed engine from a seed and salt.
@@ -353,6 +353,10 @@ func (m *Authority) Recover(seed, salt []byte) error {
 // non-nil.
 func (m *Authority) createSeedEngine() error {
 	// TODO(burgerdev): the seed should be an input
+	// TODO(burgerdev): we should not be creating keys on every SetManifest
+
+	// ============== CONTINUE HERE ==================
+
 	seed, err := crypto.GenerateRandomBytes(32)
 	if err != nil {
 		return fmt.Errorf("generating random bytes: %w", err)

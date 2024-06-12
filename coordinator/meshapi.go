@@ -56,6 +56,7 @@ func newMeshAPIServer(meshAuth *authority.Authority, bundleGetter certBundleGett
 	validator := snp.NewValidatorWithCallbacks(meshAuth, kdsGetter, logger.NewNamed(log, "snp-validator"), attestationFailuresCounter, meshAuth)
 	credentials := atlscredentials.New(atls.NoIssuer, []atls.Validator{validator})
 
+	// TODO(burgerdev): move gRPC boilerplate to a common module.
 	grpcMeshAPIMetrics := grpcprometheus.NewServerMetrics(
 		grpcprometheus.WithServerCounterOptions(
 			grpcprometheus.WithSubsystem("contrast_meshapi"),
