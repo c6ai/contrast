@@ -6,6 +6,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/json"
@@ -18,6 +20,7 @@ import (
 	"github.com/edgelesssys/contrast/coordinator/internal/authority"
 	"github.com/edgelesssys/contrast/internal/attestation/snp"
 	"github.com/edgelesssys/contrast/internal/ca"
+	"github.com/edgelesssys/contrast/internal/crypto"
 	"github.com/edgelesssys/contrast/internal/grpc/atlscredentials"
 	"github.com/edgelesssys/contrast/internal/logger"
 	"github.com/edgelesssys/contrast/internal/manifest"
@@ -122,6 +125,36 @@ func (s *userAPIServer) SetManifest(ctx context.Context, req *userapi.SetManifes
 	resp := &userapi.SetManifestResponse{
 		RootCA: ca.GetRootCACert(),
 		MeshCA: ca.GetMeshCACert(),
+	}
+	// ----- TESTING -----
+
+	if len(m.SeedshareOwnerPubKeys) != 0 {
+		seed, err := crypto.GenerateRandomBytes(32)
+		if err != nil {
+			return nil, fmt.Errorf("generating random bytes: %w", err)
+		}
+		salt, err := crypto.GenerateRandomBytes(32)
+		if err != nil {
+			return nil, fmt.Errorf("generating random bytes: %w", err)
+		}
+		key, err := x509.ParsePKIXPublicKey(m.SeedshareOwnerPubKeys[0])
+		if err != nil {
+			return nil, fmt.Errorf("marshaling key: %w", err)
+		}
+		keyRSA, ok := key.(*rsa.PublicKey)
+		if !ok {
+			return nil, errors.New("key is not an RSA public key")
+		}
+		encSeed, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, keyRSA, seed, []byte("seedshare"))
+		if err != nil {
+			return nil, fmt.Errorf("encrypting seed: %w", err)
+		}
+		resp.SeedSharesDoc = &userapi.SeedShareDocument{
+			SeedShares: []*userapi.SeedShare{
+				{PublicKey: m.SeedshareOwnerPubKeys[0], EncryptedSeed: encSeed},
+			},
+			Salt: salt,
+		}
 	}
 
 	s.logger.Info("SetManifest succeeded")
