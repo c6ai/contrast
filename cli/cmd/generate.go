@@ -387,7 +387,7 @@ func addWorkloadOwnerKeyToManifest(manifst *manifest.Manifest, keyPath string) e
 func generatePolicyForFile(ctx context.Context, genpolicyPath, regoPath, policyPath, yamlPath string, logger *slog.Logger) ([32]byte, error) {
 	args := []string{
 		"--raw-out",
-		"--use-cached-files",
+		"--layers-cache-file-path=./layers-cache.json",
 		fmt.Sprintf("--runtime-class-names=%s", "contrast-cc"),
 		fmt.Sprintf("--rego-rules-path=%s", regoPath),
 		fmt.Sprintf("--json-settings-path=%s", policyPath),
