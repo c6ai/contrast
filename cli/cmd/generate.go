@@ -24,6 +24,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/edgelesssys/contrast/internal/crypto"
 	"github.com/edgelesssys/contrast/internal/embedbin"
 	"github.com/edgelesssys/contrast/internal/kuberesource"
 	"github.com/edgelesssys/contrast/internal/manifest"
@@ -405,23 +406,20 @@ func addSeedshareOwnerKeyToManifest(manifst *manifest.Manifest, keyPath string) 
 	if block == nil {
 		return errors.New("failed to decode PEM block")
 	}
-	var publicKey []byte
+	var publicKeyHex manifest.HexString
 	switch block.Type {
-	case "PUBLIC KEY":
-		publicKey = block.Bytes
+	case "RSA PUBLIC KEY":
+		publicKeyHex = manifest.NewHexString(block.Bytes)
 	case "RSA PRIVATE KEY":
 		privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 		if err != nil {
 			return fmt.Errorf("parsing RSA private key: %w", err)
 		}
-		publicKey, err = x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
-		if err != nil {
-			return fmt.Errorf("marshaling public key: %w", err)
-		}
+		publicKeyHex = crypto.MarshalSeedShareOwnerKey(&privateKey.PublicKey)
 	default:
 		return fmt.Errorf("unsupported PEM block type: %s", block.Type)
 	}
-	manifst.SeedshareOwnerPubKeys = append(manifst.SeedshareOwnerPubKeys, manifest.NewHexString(publicKey))
+	manifst.SeedshareOwnerPubKeys = append(manifst.SeedshareOwnerPubKeys, publicKeyHex)
 	return nil
 }
 
