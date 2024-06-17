@@ -5,6 +5,8 @@ package authority
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/edgelesssys/contrast/coordinator/internal/seedengine"
 	"github.com/edgelesssys/contrast/internal/recoveryapi"
@@ -12,17 +14,49 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// ErrAlreadyRecovered is returned if recovery was requested but a seed is already set.
+var ErrAlreadyRecovered = errors.New("coordinator is already recovered")
+
 // Recover recovers the Coordinator from a seed and salt.
 func (a *Authority) Recover(_ context.Context, req *recoveryapi.RecoverRequest) (*recoveryapi.RecoverResponse, error) {
 	a.logger.Info("Recover called")
 
-	seedEngine, err := seedengine.New(req.Seed, req.Salt)
+	err := a.recover(req.Seed, req.Salt)
+	switch {
+	case errors.Is(err, ErrAlreadyRecovered):
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	case err == nil:
+		return &recoveryapi.RecoverResponse{}, nil
+	default:
+		// Pretty sure this failed because the seed was bad.
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+
+	}
+}
+
+// recover recovers the seed engine from a seed and salt.
+func (a *Authority) recover(seed, salt []byte) error {
+	seedEngine, err := seedengine.New(seed, salt)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "creating seed engine: %v", err)
+		return fmt.Errorf("creating seed engine: %w", err)
 	}
 	if !a.se.CompareAndSwap(nil, seedEngine) {
-		return nil, status.Error(codes.FailedPrecondition, "coordinator is already recovered")
+		return ErrAlreadyRecovered
 	}
-	a.hist.ConfigureSigningKey(a.se.Load().TransactionSigningKey())
-	return &recoveryapi.RecoverResponse{}, nil
+	a.hist.ConfigureSigningKey(seedEngine.TransactionSigningKey())
+	return nil
+}
+
+func (a *Authority) checkSeedEngine() error {
+	if a.se.Load() != nil {
+		return nil
+	}
+	hasLatest, err := a.hist.HasLatest()
+	if err != nil {
+		return fmt.Errorf("querying history backend: %w", err)
+	}
+	if hasLatest {
+		return ErrNeedsRecovery
+	}
+	return nil
 }
