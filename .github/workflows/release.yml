@@ -176,6 +176,17 @@ jobs:
         run: |
           git add ./packages/contrast-releases.json
           git commit -m "packages/contrast-releases: add ${{ needs.process-inputs.outputs.MAJOR_MINOR_PATCH }}"
+      - name: Update asciinema screencast
+        if: inputs.kind == 'minor'
+        working-directory: contrast-main/tools/asciinema
+        run: |
+          ./generate-screencast.sh
+      - name: Commit updated asciinema screencast
+        if: inputs.kind == 'minor'
+        working-directory: contrast-main/tools/asciinema
+        run: |
+          git add .
+          git commit -m "tools/asciinema: update screencast for ${{ needs.process-inputs.outputs.MAJOR_MINOR }}"
       - name: Bump flake version to post release patch pre-version
         if: ${{ inputs.kind == 'minor' }}
         id: bump
