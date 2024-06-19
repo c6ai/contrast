@@ -9,9 +9,33 @@
 
 set -euo pipefail
 
+for i in "$@"; do
+  case $i in
+    --demodir=*)
+      demodir="${i#*=}"
+      shift
+      ;;
+    --bin=*)
+      contrastPath="${i#*=}"
+      shift
+      ;;
+    --*)
+      echo "Unknown option $i"
+      exit 1
+      ;;
+    *)
+      ;;
+  esac
+done
+
+if [[ -z "${demodir:-}" ]]; then
+  demodir=$(nix develop .#demo-latest --command pwd)
+fi
+if [[ -z "${contrastPath:-}" ]]; then
+  contrastPath=$(nix build .#contrast-releases.latest && realpath result/bin/contrast)
+fi
 scriptdir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
-demodir=$(nix develop .#demo-latest --command pwd)
-contrastPath=$(nix build .#contrast-releases.latest && realpath result/bin/contrast)
+
 docker build -t screenrecodings docker
 
 docker run -it \
