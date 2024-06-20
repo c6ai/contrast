@@ -36,9 +36,9 @@ if [[ -z "${contrastPath:-}" ]]; then
 fi
 scriptdir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 
-docker build -t screenrecodings docker
+docker build -t screenrecodings "${scriptdir}/docker"
 
-docker run -it \
+docker run -t \
   -v "${HOME}/.kube/config:/root/.kube/config" \
   -v "${scriptdir}/recordings:/recordings" \
   -v "${scriptdir}/scripts:/scripts" \
