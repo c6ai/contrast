@@ -48,7 +48,7 @@ jobs:
           just get-credentials
       - name: Build and prepare deployments
         run: |
-          just microsoft-node-installer
+          just node-installer
       - name: E2E Test
         run: |
           nix shell .#contrast.e2e --command getdents.test -test.v \
