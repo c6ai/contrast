@@ -1,1 +1,4 @@
-# THIS FILE IS REPLACED DURING RELEASE BUILD TO INCLUDE UPDATED IMAGE REFERENCES
+ghcr.io/edgelesssys/contrast/coordinator:latest=ghcr.io/edgelesssys/contrast/coordinator:v0.8.0@sha256:ab6df3afcf4d39a335e3a8f10a7b0ebb132ba71bf5adf14e1b437ddc18304670
+ghcr.io/edgelesssys/contrast/initializer:latest=ghcr.io/edgelesssys/contrast/initializer:v0.8.0@sha256:2e747da253216361223069e50513efcd0ee19454edf1ca933fd31d62644dcbec
+ghcr.io/edgelesssys/contrast/service-mesh-proxy:latest=ghcr.io/edgelesssys/contrast/service-mesh-proxy:v0.8.0@sha256:abd8cc94693829e6c99d7160cad3f2aeb59cba1f6a34a5f7d8f4e9dd5ca852bb
+ghcr.io/edgelesssys/contrast/node-installer:latest=ghcr.io/edgelesssys/contrast/node-installer:v0.8.0@sha256:acd1242472fbf4e929d7404fa1e96faac5f9dea482ab0f9c685ac995b8952cc4
