@@ -131,6 +131,7 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
         with:
           # ref: main
+          ref: ${{ needs.process-inputs.outputs.WORKING_BRANCH }}
           path: contrast-main
       - uses: ./contrast-working/.github/actions/setup_nix
         with:
@@ -190,7 +191,7 @@ jobs:
           ./tools/asciinema/generate-screencast.sh --demodir="$tmpdir" --bin=result-cli/bin/contrast
       - name: Commit updated asciinema screencast
         if: inputs.kind == 'minor'
-        working-directory: contrast-main/tools/asciinema
+        working-directory: contrast-main
         run: |
           git add .
           git commit -m "tools/asciinema: update screencast for ${{ needs.process-inputs.outputs.MAJOR_MINOR }}"
