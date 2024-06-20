@@ -188,7 +188,7 @@ jobs:
         run: |
           tmpdir=$(mktemp -d)
           cp workspace/{coordinator.yml,runtime.yml,emojivoto-demo.zip} "$tmpdir"
-          ./tools/asciinema/generate-screencast.sh --demodir="$tmpdir" --bin=result-cli/bin/contrast
+          ./tools/asciinema/generate-screencasts.sh --demodir="$tmpdir" --bin=result-cli/bin/contrast
       - name: Commit updated asciinema screencast
         if: inputs.kind == 'minor'
         working-directory: contrast-main
