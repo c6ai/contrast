@@ -183,11 +183,11 @@ jobs:
           git commit -m "packages/contrast-releases: add ${{ needs.process-inputs.outputs.MAJOR_MINOR_PATCH }}"
       - name: Update asciinema screencast
         if: inputs.kind == 'minor'
-        working-directory: contrast-main/tools/asciinema
+        working-directory: contrast-main
         run: |
           tmpdir=$(mktemp -d)
           cp workspace/{coordinator.yml,runtime.yml,emojivoto-demo.zip} "$tmpdir"
-          ./generate-screencast.sh --demodir="$tmpdir" --bin=result-cli/bin/contrast
+          ./tools/asciinema/generate-screencast.sh --demodir="$tmpdir" --bin=result-cli/bin/contrast
       - name: Commit updated asciinema screencast
         if: inputs.kind == 'minor'
         working-directory: contrast-main/tools/asciinema
