@@ -6,7 +6,7 @@ package kuberesource
 import (
 	"fmt"
 
-	"github.com/edgelesssys/contrast/internal/flavours"
+	"github.com/edgelesssys/contrast/node-installer/flavours"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	applycorev1 "k8s.io/client-go/applyconfigurations/core/v1"
 )
