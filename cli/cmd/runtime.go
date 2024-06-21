@@ -7,9 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// This value is injected at build time.
-var runtimeHandler = "contrast-cc"
-
 // NewRuntimeCmd creates the contrast runtime subcommand.
 func NewRuntimeCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -28,5 +25,5 @@ have the runtimeClassName set to the value returned by this command.
 }
 
 func runRuntime(cmd *cobra.Command, _ []string) {
-	cmd.Println(runtimeHandler)
+	cmd.Println(runtimeHandler())
 }

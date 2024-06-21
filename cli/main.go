@@ -30,7 +30,6 @@ func execute() error {
 
 var (
 	version          = "0.0.0-dev"
-	runtimeHandler   = "contrast-cc"
 	launchDigest     = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 	genpolicyVersion = "0.0.0-dev"
 )
@@ -40,7 +39,7 @@ func newRootCmd() *cobra.Command {
 	var versionsBuilder strings.Builder
 	versionsWriter := tabwriter.NewWriter(&versionsBuilder, 0, 0, 4, ' ', 0)
 	fmt.Fprintf(versionsWriter, "%s\n\n", version)
-	fmt.Fprintf(versionsWriter, "\truntime handler:\t%s\n", runtimeHandler)
+	fmt.Fprintf(versionsWriter, "\truntime handler:\tcontrast-cc-%s\n", launchDigest[:32])
 	fmt.Fprintf(versionsWriter, "\tlaunch digest:\t%s\n", launchDigest)
 	fmt.Fprintf(versionsWriter, "\tgenpolicy version:\t%s\n", genpolicyVersion)
 	fmt.Fprintf(versionsWriter, "\timage versions:\n")

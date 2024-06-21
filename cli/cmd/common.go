@@ -6,6 +6,7 @@ package cmd
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -41,7 +42,13 @@ var (
 	//
 	// It is intentionally left empty for dev builds.
 	DefaultCoordinatorPolicyHash = ""
+	// This value is injected at build time.
+	launchDigest = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 )
+
+func runtimeHandler() string {
+	return fmt.Sprintf("contrast-cc-%s", launchDigest[:32])
+}
 
 func cachedir(subdir string) (string, error) {
 	dir := os.Getenv(cacheDirEnv)
