@@ -4,7 +4,6 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -125,11 +124,7 @@ func decryptedSeedFromShares(seedSharesPath, seedShareOwnerKeyPath string) ([]by
 		return nil, nil, fmt.Errorf("unmarshaling seed shares: %w", err)
 	}
 	for _, share := range seedShareDoc.SeedShares {
-		shareKeyBytes, err := hex.DecodeString(share.PublicKey)
-		if err != nil {
-			return nil, nil, fmt.Errorf("decoding seed share key: %w", err)
-		}
-		shareKey, err := x509.ParsePKCS1PublicKey(shareKeyBytes)
+		shareKey, err := x509.ParsePKCS1PublicKey(share.PublicKey)
 		if err != nil {
 			return nil, nil, fmt.Errorf("parsing seed share key: %w", err)
 		}

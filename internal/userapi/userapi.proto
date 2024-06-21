@@ -29,7 +29,7 @@ message SeedShareDocument {
 }
 
 message SeedShare {
-  string PublicKey = 1;
+  bytes PublicKey = 1;
   bytes EncryptedSeed = 2;
 }
 

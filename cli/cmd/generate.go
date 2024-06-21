@@ -150,7 +150,9 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("adding seedshare owner key to manifest: %w", err)
 		}
 	}
-	slices.Sort(manifest.SeedshareOwnerPubKeys)
+	slices.SortStableFunc(manifest.SeedshareOwnerPubKeys, func(i, j []byte) int {
+		return bytes.Compare(i, j)
+	})
 
 	manifestData, err = json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -418,7 +420,7 @@ func addSeedshareOwnerKeyToManifest(manifst *manifest.Manifest, keyPath string) 
 	default:
 		return fmt.Errorf("unsupported PEM block type: %s", block.Type)
 	}
-	manifst.SeedshareOwnerPubKeys = append(manifst.SeedshareOwnerPubKeys, manifest.NewHexString(publicKey))
+	manifst.SeedshareOwnerPubKeys = append(manifst.SeedshareOwnerPubKeys, publicKey)
 	return nil
 }
 

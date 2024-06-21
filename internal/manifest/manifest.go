@@ -18,7 +18,7 @@ type Manifest struct {
 	Policies                map[HexString][]string
 	ReferenceValues         ReferenceValues
 	WorkloadOwnerKeyDigests []HexString
-	SeedshareOwnerPubKeys   []HexString
+	SeedshareOwnerPubKeys   [][]byte
 }
 
 // ReferenceValues contains the workload independent reference values.
