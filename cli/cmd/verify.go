@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -96,7 +97,13 @@ func runVerify(cmd *cobra.Command, _ []string) error {
 	}
 	log.Debug("Got response")
 
-	fmt.Fprintln(cmd.OutOrStdout(), "✔️ Successfully verified coordinator")
+	currentManifest := resp.Manifests[len(resp.Manifests)-1]
+	// Local manifest will have a newline if the user has edited the file.
+	if bytes.Equal(currentManifest, bytes.TrimRight(manifestBytes, "\n")) {
+		fmt.Fprintln(cmd.OutOrStdout(), "✔️ Successfully verified coordinator")
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "❌Manifest at Coordinator does not match local manifest")
+	}
 
 	filelist := map[string][]byte{
 		coordRootPEMFilename: resp.RootCA,
